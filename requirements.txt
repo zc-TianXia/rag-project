@@ -1,0 +1,19 @@
+Django==4.2.11
+djangorestframework==3.16.1
+drf_spectacular==0.29.0
+PyMuPDF
+modelscope==1.37.1
+numpy==1.26.4
+pgvector==0.4.2
+psycopg2_binary==2.9.12
+python-decouple==3.8
+python_docx==1.2.0
+requests==2.34.2
+text2vec==1.3.8
+
+# Text2Vec 隐式依赖补充（防止 Docker 构建时漏装）
+torch
+transformers
+sentence-transformers
+jieba
+django-cors-headers

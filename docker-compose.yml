@@ -1,0 +1,38 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: zc20040714
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    build:
+      context: .
+#      network: host
+    container_name: web
+    env_file:
+      - .env
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: postgres
+      DB_USER: user
+      DB_PASSWORD: zc20040714
+      TEXT2VEC_MODEL_PATH: /app/text2vec_model
+    volumes:
+      - .:/app
+      - ./huggingface/hub/models--shibing624--text2vec-base-chinese:/app/text2vec_model
+    ports:
+      - "8000:8000"
+    command: bash start.sh  # <--- 改成这一行！
+
+volumes:
+  pgdata:
