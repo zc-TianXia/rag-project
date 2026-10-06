@@ -54,7 +54,7 @@ class ChatStreamView(APIView):
             try:
                 # 实例化服务并执行检索（逻辑复用于 chat_service 中的逻辑）
                 rag_service = RAGIngestionService()
-                chunks = rag_service.search_knowledge(query_text=user_message, top_k=3)
+                chunks = rag_service.hybrid_search(query_text=user_message, top_k=3)
 
                 # 提取真实的文件名 (注意去重)
                 # 根据你的 services.py，字段名是 'source_file'
@@ -67,6 +67,7 @@ class ChatStreamView(APIView):
             except Exception as e:
                 print(f"检索引用来源失败: {e}")
                 sources_data = [{"title": "检索失败"}]
+                chunks = []
 
             # 发送真实的引用来源
             header_data = {"sources": sources_data}
@@ -74,9 +75,8 @@ class ChatStreamView(APIView):
 
             # --- 【第二步：流式发送 AI 回复正文】 ---
             # 这里继续调用原来的生成器获取回答内容
-            for chunk in generate_rag_response_stream(user_message, session_id):
+            for chunk in generate_rag_response_stream(user_message, session_id, chunks=chunks):
                 yield chunk
-
             yield "[DONE]"
 
 

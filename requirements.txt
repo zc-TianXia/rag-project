@@ -17,3 +17,4 @@ transformers
 sentence-transformers
 jieba
 django-cors-headers
+django-redis

@@ -4,7 +4,11 @@ from django.conf import settings
 from .models import Document, DocumentChunk,KnowledgeBase
 from pgvector.django import CosineDistance
 from django.db.models import F
-
+from django.core.cache import cache
+import hashlib
+import time
+import jieba
+from django.db.models import Q
 
 # 强制断网环境变量
 os.environ["HF_HUB_OFFLINE"] = "1"
@@ -12,16 +16,30 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 
 class RAGIngestionService:
+    _instance = None # 类属性，用来存唯一实例
+
+    def __new__(cls):
+        # 重写 __new__ 方法：控制创建实例的过程
+        if cls._instance is None:
+            print("🔄 第一次创建实例，加载模型...")
+            cls._instance = super().__new__(cls)
+        else:
+            print("✅ 复用已有实例，不加载模型")
+        return cls._instance
+
     def __init__(self):
-        print("🚀 正在初始化 RAG 服务 (纯本地 Django + PGVector 模式)...")
-        try:
-            from text2vec import SentenceModel
-            # 直接加载本地模型
-            self.embedding_model = SentenceModel('shibing624/text2vec-base-chinese')
-            print("✅ Embedding 模型加载成功！")
-        except Exception as e:
-            print(f"❌ 模型加载失败: {e}")
-            raise e
+        # 防止重复初始化属性
+        if not hasattr(self, '_initialized'):
+            print("正在初始化 RAG 服务（纯本地 Django + PGVector 模式）...")
+            try:
+                from text2vec import SentenceModel
+                # 直接加载本地模型
+                self.embedding_model = SentenceModel('shibing624/text2vec-base-chinese')
+                print("✅ Embedding 模型加载成功！")
+            except Exception as e:
+                print(f"❌ 模型加载失败: {e}")
+                raise e
+            self._initialized = True
 
 
     # 万物皆对象，list等数据类型只不过python底层封装了类，所以可以直接用语法糖，如a=[],
@@ -142,8 +160,7 @@ class RAGIngestionService:
 
         print(f"🎉 处理完成！共处理 {file_count} 个新文件，知识库构建完毕。")
 
-
-    def search_knowledge(self, query_text: str, top_k: int = 3):
+    def search_knowledge(self, query_text: str, top_k: int = 3, use_cache: bool = True):
         """
         纯本地检索逻辑：根据用户问题查找最相关的知识库片段
         :param query_text: 用户的问题
@@ -152,25 +169,35 @@ class RAGIngestionService:
         """
         print(f"🔍 [本地检索] 正在分析查询: '{query_text}'")
 
-        # 1. 将用户的问题转化为向量 (使用本地加载的 embedd ing 模型)
-        # 注意：这里复用了你之前实例化时加载的 self.embedding_model
+        # ========== Redis 缓存部分（新增） ==========
+        # 用查询文本生成唯一的缓存 key（避免特殊字符问题）
+        start_time = time.perf_counter()  # 开始计时
+        cache_key = "rag_search_" + hashlib.md5(query_text.encode()).hexdigest()
+        if use_cache:  # <--- 加个开关
+            cached_result = cache.get(cache_key)
+            if cached_result is not None:
+                print(f"⚡️ [缓存命中] 直接返回缓存结果，跳过检索")
+                return cached_result
+        # ========== Redis 缓存部分结束 ==========
+
+
+        # 1. 将用户的问题转化为向量 (使用本地加载的 embedding 模型)
         query_vector = self.embedding_model.encode([query_text])[0].tolist()
 
-        # ... (前面的代码不变) ...
-
-        # 1. 先排序，取前 top_k 个（不要急着 filter！）
+        # 2. 先排序，取前 top_k 个（不要急着 filter！）
         raw_results = (
             DocumentChunk.objects
-                .annotate(distance=CosineDistance('embedding', query_vector))
-                .order_by('distance')[:top_k]  # 先拿前3个看看
+            .annotate(distance=CosineDistance('embedding', query_vector))
+            .order_by('distance')[:top_k]
         )
 
-        # 2. 手动遍历，加阈值判断
+        # 3. 手动遍历，加阈值判断
         relevant_chunks = []
         for chunk in raw_results:
             # 只有当距离小于阈值时，才收录
             if chunk.distance < 0.5:
                 relevant_chunks.append({
+                    'id':chunk.id,
                     'content': chunk.content,
                     'source_file': chunk.document.file_name,
                     'score': chunk.distance
@@ -179,28 +206,124 @@ class RAGIngestionService:
             else:
                 print(f"❌ 跳过不相关片段 (距离: {chunk.distance:.4f} >= 0.5)")
 
-        # 3. 如果一个都没收录，提示用户
+        # 4. 如果一个都没收录，提示用户
         if not relevant_chunks:
             print("⚠️ 未找到足够相关的知识库内容（可能需要调整阈值）。")
 
+
+        # ========== Redis 缓存部分（新增） ==========
+        # 将本次检索结果存入 Redis，有效期 1 小时（3600 秒）
+        if use_cache:  # <--- 加个开关
+            cache.set(cache_key, relevant_chunks, 3600)
+            print(f"💾 [缓存存储] 结果已缓存，1小时内相同问题直接返回")
+        end_time = time.perf_counter()
+        print(f"💾 [正常检索并缓存] 总耗时: {end_time - start_time:.4f}秒")
+        # ========== Redis 缓存部分结束 ==========
+
         return relevant_chunks
 
-    def search(self, query, k=3):
+
+    def keyword_search(self, query_text, top_k=5):
+        # 1. 分词：用 jieba 拆前端提问
+        words = jieba.lcut(query_text)
+        words = [w for w in words if len(w.strip()) > 1]  # 过滤单字噪音
+        if not words:
+            return []
+
+        # 2. 构造 ORM 动态 OR 查询（自动防 SQL 注入，自动用 rag_document_chunk 表）
+        q = Q()
+        for w in words:
+            q |= Q(content__icontains=w)  # 等价于 content LIKE '%词%'
+
+        # 3. 查询：select_related 提前 JOIN document 拿文件名，避免额外查询
+        rows = DocumentChunk.objects.filter(q).select_related('document')[:top_k]
+
+        # 4. 格式化返回：必须包含 id（供混合检索融合），source_file 从外键拿
+        chunks = []
+        for chunk in rows:
+            chunks.append({
+                'id': chunk.id,  # ← 关键：混合检索要去重，必须有 id
+                'content': chunk.content,
+                'source_file': chunk.document.file_name,  # 外键拿文件名，不是直接列
+                'chunk_index': chunk.chunk_index,
+                'score': 1.0  # 关键词命中给个默认分
+            })
+        return chunks
+
+    def hybrid_search(self, query_text, top_k=5, vector_chunks=None):
+        # 1. 混合检索自己的独立缓存 Key（加上了 hybrid 前缀和 top_k）
+        cache_key = "rag_hybrid_search_" + str(top_k) + "_" + hashlib.md5(query_text.encode()).hexdigest()
+
+        # 2. 先看看自己的抽屉里有没有
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            print(f"⚡️ [混合检索缓存命中] 直接返回融合结果，跳过双重检索")
+            return cached_result
+
+        # 3. 如果没有缓存，开始干活...
+        print(f"🔍 [混合检索] 开始向量+关键词双重检索...")
+
         """
-        向量检索优化版
+        混合检索：向量检索 + 关键词检索，然后用 RRF 融合排序。
         """
-        print(f"🔍 正在搜索: {query}")
-        query_vec = self.model.encode(query).tolist()
+        # 1. 向量检索（你原来的方法）
+        if vector_chunks is None:
+            vector_chunks = self.search_knowledge(
+                query_text, top_k=top_k, use_cache=False
+            )
 
-        # 使用 PGVector 的专用检索语法 (比 annotate 更快)
-        # 注意：CosineDistance 在这里表示 "距离越小越相似"
-        results = DocumentChunk.objects.filter(
-            embedding=CosineDistance(query_vec)  # 修正了原代码中的写法
-        ).order_by('distance')[:k]
+        # 2. 关键词检索（我们刚写的）
+        keyword_chunks = self.keyword_search(query_text, top_k=top_k)
 
-        # 输出结果
-        for i, res in enumerate(results):
-            print(f"👉 {i + 1}. [{res.document.file_name}] (距离: {res.distance:.4f})")
-            print(f"   内容: {res.content[:60]}...\n")
+        # 3. RRF 融合
+        # RRF 公式：score = 1 / (60 + rank)
+        # rank 是片段在某个结果列表中的排名（从0开始）
+        rrf_score = {}
 
-        return results
+        for rank, chunk in enumerate(vector_chunks):
+            chunk_id = chunk['id']
+            rrf_score[chunk_id] = rrf_score.get(chunk_id, 0) + 1 / (60 + rank)
+
+        for rank, chunk in enumerate(keyword_chunks):
+            chunk_id = chunk['id']
+            rrf_score[chunk_id] = rrf_score.get(chunk_id, 0) + 1 / (60 + rank)
+
+        # 4. 合并片段信息，并按融合后的分数排序
+        combined = {}
+        all_chunks = vector_chunks + keyword_chunks
+        for chunk in all_chunks:
+            combined[chunk['id']] = chunk
+
+        # 给每个片段补上融合后的分数
+        for chunk_id, score in rrf_score.items():
+            if chunk_id in combined:
+                combined[chunk_id]['rrf_score'] = score
+
+        # 按 rrf_score 从大到小排序
+        sorted_chunks = sorted(combined.values(), key=lambda x: x.get('rrf_score', 0), reverse=True)
+
+        # 返回前 top_k 个
+        return sorted_chunks[:top_k]
+
+    # def search(self, query, k=3):
+    #     """
+    #     向量检索优化版
+    #     """
+    #     print(f"🔍 正在搜索: {query}")
+    #     query_vec = self.model.encode(query).tolist()
+    #
+    #     # 使用 PGVector 的专用检索语法 (比 annotate 更快)
+    #     # 注意：CosineDistance 在这里表示 "距离越小越相似"
+    #     results = DocumentChunk.objects.filter(
+    #         embedding=CosineDistance(query_vec)  # 修正了原代码中的写法
+    #     ).order_by('distance')[:k]
+    #
+    #     # 输出结果
+    #     for i, res in enumerate(results):
+    #         print(f"👉 {i + 1}. [{res.document.file_name}] (距离: {res.distance:.4f})")
+    #         print(f"   内容: {res.content[:60]}...\n")
+    #
+    #     return results
+
+
+

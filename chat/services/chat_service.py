@@ -22,26 +22,27 @@ def get_llm_provider():
 
 
 # --- 核心流式生成函数 ---
-def generate_rag_response_stream(message: str, session_id: str):
+def generate_rag_response_stream(message: str, session_id: str,chunks=None):
     """
     1. 检索：使用新的 RAGIngestionService 从 PostgreSQL 中检索
     2. 生成：使用 LLM 生成流式回答
     """
 
     # --- 【阶段 1：知识检索 (Retrieval)】 ---
-    try:
-        # 实例化你的服务
-        rag_service = RAGIngestionService()
+    # 如果外部已经传入了检索结果，就直接用，不再重复检索
+    if chunks is None:
+        # 没有传，才自己检索（比如直接调用该函数时）
+        try:
+            rag_service = RAGIngestionService()
+            chunks = rag_service.search_knowledge(query_text=message, top_k=3)
+            print(f"🔍 检索到 {len(chunks)} 个相关片段")
+        except Exception as e:
+            print(f"❌ 检索阶段发生错误: {e}")
+            chunks = []  # 如果出错，传空列表给 LLM
+    else:
+        # 外部已有结果，直接打印一下数量方便调试
+        print(f"🔍 [检索结果] 共 {len(chunks)} 个片段")
 
-        # 调用检索方法 (这里的逻辑完全基于你发给我的 services.py)
-        # 注意：search_knowledge 是你代码里写的方法名
-        chunks = rag_service.search_knowledge(query_text=message, top_k=3)
-
-        print(f"🔍 检索到 {len(chunks)} 个相关片段")  # 打印日志，方便你调试
-
-    except Exception as e:
-        print(f"❌ 检索阶段发生错误: {e}")
-        chunks = []  # 如果出错，传空列表给 LLM
 
     # --- 【阶段 2：构建 Prompt (Augmentation)】 ---
     # 注意：RAGPromptBuilder 需要的 chunk 格式是 {'content': ..., 'source': ..., 'score': ...}
