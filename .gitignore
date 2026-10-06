@@ -39,3 +39,4 @@ pre_test
 app01
 import_data.py
 huggingface
+chat/templates/
