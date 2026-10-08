@@ -74,4 +74,10 @@ django_Qw_Project/
 
 ## 作者
 
-[zc-TianXia](https://github.com/zc-TianXia)
+[zc-TianXia](https://github.com/zc-TianXia/rag-project)
+
+
+## 注意事项（必看）
+
+由于向量化模型过大，所以我并未将模型传至github上，若想启动整个项目，需自己本地下好向量化模型，放在项目里面，推荐跟manage.py文件同级；
+并在docker-compose.yml文件中将web容器的volumes第二行左侧映射部分修改为实际文件名
