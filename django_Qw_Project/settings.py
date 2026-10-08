@@ -106,11 +106,11 @@ WSGI_APPLICATION = 'django_Qw_Project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'HOST': config('DB_HOST', default='db'),        # Docker 里服务名叫 db
+        'HOST': config('DB_HOST', default='db'),
         'PORT': config('DB_PORT', default='5432'),
-        'NAME': config('DB_NAME', default='postgres'), # 改成你 docker-compose 里的库名
+        'NAME': config('DB_NAME', default='postgres'),
         'USER': config('DB_USER', default='user'),
-        'PASSWORD': config('DB_PASSWORD', default='zc20040714 '),
+        'PASSWORD': config('DB_PASSWORD'),
     }
 }
 
@@ -170,20 +170,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 
-
-
 # 硅基流动 LLM 配置
 LLM_CONFIG = {
-    # 使用我们刚才写的兼容 OpenAI 格式的原生 Provider
+    # 使用兼容 OpenAI 格式的原生 Provider
     "provider": "openai_compatible",
 
-    # 你的硅基流动 API Key (以 sk- 开头)
-    "api_key": config("SILICONFLOW_API_KEY", default="sk-omccqrcyezewodecrrwhficgclmaohdphfiefncnluvkufqk"),
+    # 硅基流动 API Key (以 sk- 开头)
+    "api_key": config("SILICONFLOW_API_KEY"),
 
-    # 硅基流动的官方 Base URL (注意结尾不要带 /v1，我们的代码里会自动拼)
+    # 硅基流动的官方 Base URL
     "base_url": "https://api.siliconflow.cn",
 
-    # 你在硅基流动上选用的模型 ID，比如 DeepSeek-V3 或 Qwen2.5
+    # 硅基流动上选用的模型 ID，比如 DeepSeek-V3 或 Qwen2.5
     "model": "deepseek-ai/DeepSeek-V3",
 
     # 生成参数

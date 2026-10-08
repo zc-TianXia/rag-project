@@ -40,7 +40,7 @@ class DocumentChunk(models.Model):
     content = models.TextField(verbose_name="文本内容")
     chunk_index = models.IntegerField(default=0, verbose_name="分块索引")
 
-    # 👇 核心：这就是你装了 pgvector 插件后，Django 存向量的专属字段！
+    # 👇 核心：装了 pgvector 插件后，Django 存向量的专属字段！
     # text2vec-base-chinese 默认维度是 768
     embedding = VectorField(dimensions=768, null=True, blank=True, verbose_name="向量数据")
 

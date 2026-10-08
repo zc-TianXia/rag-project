@@ -37,13 +37,12 @@ urlpatterns = [
     # 名字 'schema' 很重要，下面那个视图要靠这个名字找到它
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
 
-    # 这个路径就是你等下要在浏览器里访问的可视化网页（给人看的）
+    # 这个路径是在浏览器里访问的可视化网页（给人看的）
     # url_name='schema' 表示去读取上面那个 JSON 数据来渲染页面
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 
-    # 4. 如果你还需要以前的首页 HTML 页面，建议单独放这里，不要混在 chat app 里
+    # 4. 未前后端分离前的代码
     # path('', views.index, name='index'),
-
     # path('api/', include('app01.urls')),    # 未前后端分离前的代码，
     # path('chat/', include('chat.urls')),    # 核心：把根路径 '/' 的所有请求都转给 chat 应用处理
 

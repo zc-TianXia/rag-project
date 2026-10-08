@@ -41,7 +41,7 @@ class ChatMessage(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices)
     content = models.TextField(verbose_name="消息内容")
 
-    # 面试亮点：记录 AI 回答时引用的 chunks，支持前端展示"参考来源"
+    # 亮点：记录 AI 回答时引用的 chunks，支持前端展示"参考来源"
     referenced_chunks = models.ManyToManyField(
         'documents.DocumentChunk',
         blank=True,

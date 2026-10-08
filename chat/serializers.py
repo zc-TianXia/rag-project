@@ -7,7 +7,6 @@ class ChatRequestSerializer(serializers.Serializer):
     """
     聊天请求参数校验器
     """
-    # 使用 'message' 还是 'query' 都可以，这里沿用你图片里的 'message'
     message = serializers.CharField(
         required=True,
         max_length=2000,

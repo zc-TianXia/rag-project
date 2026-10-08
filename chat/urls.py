@@ -5,7 +5,7 @@ from . import views
 from .views import HealthCheckAPIView
 from .views import ChatStreamView
 
-app_name = 'chat'  # 加上这个是个好习惯，防止命名冲突
+app_name = 'chat'  # 防止命名冲突
 
 urlpatterns = [
     # path('', views.chat_page, name='chat_page'),  这两行是未前后端分离时的程序

@@ -305,25 +305,7 @@ class RAGIngestionService:
         # 返回前 top_k 个
         return sorted_chunks[:top_k]
 
-    # def search(self, query, k=3):
-    #     """
-    #     向量检索优化版
-    #     """
-    #     print(f"🔍 正在搜索: {query}")
-    #     query_vec = self.model.encode(query).tolist()
-    #
-    #     # 使用 PGVector 的专用检索语法 (比 annotate 更快)
-    #     # 注意：CosineDistance 在这里表示 "距离越小越相似"
-    #     results = DocumentChunk.objects.filter(
-    #         embedding=CosineDistance(query_vec)  # 修正了原代码中的写法
-    #     ).order_by('distance')[:k]
-    #
-    #     # 输出结果
-    #     for i, res in enumerate(results):
-    #         print(f"👉 {i + 1}. [{res.document.file_name}] (距离: {res.distance:.4f})")
-    #         print(f"   内容: {res.content[:60]}...\n")
-    #
-    #     return results
+
 
 
 

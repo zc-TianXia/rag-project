@@ -5,10 +5,7 @@ from .prompt_builder import RAGPromptBuilder
 import json
 from django.conf import settings
 
-
-# --- 1. 导入你的新 Service (核心改动) ---
-# 注意：这里假设你的 services.py 在同级目录或 Python 路径下
-from documents.services import RAGIngestionService  # 如果报错，可能需要 from documents.services import ...
+from documents.services import RAGIngestionService
 
 
 # --- 获取 LLM 提供者 ---
@@ -46,7 +43,7 @@ def generate_rag_response_stream(message: str, session_id: str,chunks=None):
 
     # --- 【阶段 2：构建 Prompt (Augmentation)】 ---
     # 注意：RAGPromptBuilder 需要的 chunk 格式是 {'content': ..., 'source': ..., 'score': ...}
-    # 但你的 services.py 返回的是 {'content': ..., 'source_file': ..., 'score': ...}
+    # 但services.py 返回的是 {'content': ..., 'source_file': ..., 'score': ...}
     # 所以需要做一个简单的转换
     formatted_chunks = []
     for chunk in chunks:
